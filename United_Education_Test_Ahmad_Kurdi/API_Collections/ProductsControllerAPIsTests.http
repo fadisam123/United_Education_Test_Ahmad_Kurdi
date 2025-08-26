@@ -1,0 +1,114 @@
+@hostname = localhost
+@port = 7251
+@host = {{hostname}}:{{port}}
+@ProductsApi = https://{{host}}/api/products
+
+@ContentType = application/json
+@existingProductId = 00000000-0000-0000-0000-000000000000
+@nonExistentProductId = 11111111-1111-1111-1111-111111111111
+
+//-----------------------//
+// Get all products - 200 OK (default paging)
+//-----------------------//
+GET {{ProductsApi}}
+Accept: {{ContentType}}
+###
+
+//-----------------------//
+// Get products - with query (filter, sort, paging)
+//-----------------------//
+GET {{ProductsApi}}?Filter=acc&SortColumn=price&SortOrder=asc&Page=1&PageSize=10
+Accept: {{ContentType}}
+###
+
+//-----------------------//
+// Get single product - success (replace id)
+//-----------------------//
+GET {{ProductsApi}}/{{existingProductId}}
+Accept: {{ContentType}}
+###
+
+//-----------------------//
+// Get single product - not found (use non-existent id)
+//-----------------------//
+GET {{ProductsApi}}/{{nonExistentProductId}}
+Accept: {{ContentType}}
+###
+
+//-----------------------//
+// Create product - success (201 Created)
+//-----------------------//
+POST {{ProductsApi}}
+Accept: {{ContentType}}
+Content-Type: {{ContentType}}
+
+{
+  "name": "Simple Test Product",
+  "description": "Short description",
+  "price": 9.99,
+  "categoryId": null
+}
+###
+
+//-----------------------//
+// Create product - validation error (missing name)
+//-----------------------//
+POST {{ProductsApi}}
+Accept: {{ContentType}}
+Content-Type: {{ContentType}}
+
+{
+  "description": "Missing required name",
+  "price": 1.0
+}
+###
+
+//-----------------------//
+// Update product - success (204 No Content)
+//-----------------------//
+PUT {{ProductsApi}}/{{existingProductId}}
+Accept: {{ContentType}}
+Content-Type: {{ContentType}}
+
+{
+  "name": "Updated Name",
+  "description": "Updated description",
+  "price": 19.99,
+  "categoryId": null
+}
+###
+
+//-----------------------//
+// Update product - validation error (bad model)
+//-----------------------//
+PUT {{ProductsApi}}/{{existingProductId}}
+Accept: {{ContentType}}
+Content-Type: {{ContentType}}
+
+{
+  "name": "",
+  "price": -5
+}
+###
+
+//-----------------------//
+// Delete product - success (204 No Content)
+//-----------------------//
+DELETE {{ProductsApi}}/{{existingProductId}}
+Accept: {{ContentType}}
+###
+
+//-----------------------//
+// Delete product - not found
+//-----------------------//
+DELETE {{ProductsApi}}/{{nonExistentProductId}}
+Accept: {{ContentType}}
+###
+
+//-----------------------//
+// Get categories - 200 OK
+//-----------------------//
+GET {{ProductsApi}}/categories
+Accept: {{ContentType}}
+###
+

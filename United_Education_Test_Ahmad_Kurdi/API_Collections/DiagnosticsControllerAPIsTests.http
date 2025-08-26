@@ -1,0 +1,49 @@
+@hostname=localhost
+@port=7251
+@host={{hostname}}:{{port}}
+@DiagnosticsApi = https://{{host}}/api/diagnostics
+
+@ContentType = application/json
+
+//-----------------------//
+// Success Endpoint - Returns 200 OK
+GET {{DiagnosticsApi}}/success
+Accept: {{ContentType}}
+###
+//-----------------------//
+
+
+
+//-----------------------//
+// Slow Endpoint - Simulates delayed response (2 seconds)
+GET {{DiagnosticsApi}}/slow
+Accept: {{ContentType}}
+###
+//-----------------------//
+
+
+
+//-----------------------//
+// Not Found Endpoint - Returns 404
+GET {{DiagnosticsApi}}/not-found
+Accept: {{ContentType}}
+###
+//-----------------------//
+
+
+
+//-----------------------//
+// Bad Request Endpoint - Returns 400
+GET {{DiagnosticsApi}}/bad-request
+Accept: {{ContentType}}
+###
+//-----------------------//
+
+
+
+//-----------------------//
+// Server Error Endpoint - Returns 500
+GET {{DiagnosticsApi}}/server-error
+Accept: {{ContentType}}
+###
+//-----------------------//

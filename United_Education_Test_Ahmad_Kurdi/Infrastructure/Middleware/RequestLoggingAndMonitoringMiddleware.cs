@@ -1,33 +1,46 @@
-﻿using System.Text.Json;
+﻿using App.Metrics;
+using App.Metrics.Counter;
+using App.Metrics.Registry;
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using United_Education_Test_Ahmad_Kurdi.DTOs.Response;
 
 public class RequestLoggingAndMonitoringMiddleware
 {
     #region Fields
     private readonly RequestDelegate _next;
     private readonly ILogger<RequestLoggingAndMonitoringMiddleware> _logger;
+    private readonly IMetrics _metrics;
+    public static readonly CounterOptions HttpErrors = new CounterOptions
+    {
+        Name = "http.errors",
+        Context = "http",
+        MeasurementUnit = Unit.Errors
+    };
 
-    // OpenTelemetry Counter (for errors count)
-    private static readonly Meter Meter = new("RequestLoggingAndMonitoring.Middleware", "1.0");
-    private static readonly Counter<long> ErrorCounter = Meter.CreateCounter<long>("http.errors");
-
-    // JsonSerializerOptions
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = false,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
     // Defining some const
     private const string ErrorMessage = "An unexpected error occurred";
-    private const string HealthCheckPath = "/health";
+    private const string HealthPath = "/health";
+    private const string MetricPath = "/metrics";
     #endregion
 
     #region Constructor
     public RequestLoggingAndMonitoringMiddleware(
         RequestDelegate next,
+        IMetrics metrics,
         ILogger<RequestLoggingAndMonitoringMiddleware> logger)
     {
         _next = next ?? throw new ArgumentNullException(nameof(next));
+        _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
     #endregion
@@ -36,11 +49,13 @@ public class RequestLoggingAndMonitoringMiddleware
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        var path = context.Request.Path.Value ?? string.Empty;
+        var path = context.Request.Path;
 
-        // Check if path should be ignored (i.e., /health path)
-        var isHealthCheck = path.StartsWith(HealthCheckPath, StringComparison.OrdinalIgnoreCase);
-        if (isHealthCheck)
+        var isHealthPath = path.StartsWithSegments(HealthPath, StringComparison.OrdinalIgnoreCase);
+        var isMetricPath = path.StartsWithSegments(MetricPath, StringComparison.OrdinalIgnoreCase);
+
+        // Check if path should be ignored
+        if (isHealthPath || isMetricPath)
         {
             await _next(context);
             return;
@@ -69,7 +84,7 @@ public class RequestLoggingAndMonitoringMiddleware
                 capturedException = ex;
                 await HandleExceptionAsync(context, ex, correlationId, sw.Elapsed);
                 // Count as error
-                ErrorCounter.Add(1, new KeyValuePair<string, object?>("status", 500));
+                TrackError(500, context);
             }
             finally
             {
@@ -78,7 +93,7 @@ public class RequestLoggingAndMonitoringMiddleware
                 {
                     LogRequestInfo(context, sw.Elapsed, correlationId);
                     if (context.Response.StatusCode >= 400)
-                        ErrorCounter.Add(1, new KeyValuePair<string, object?>("status", context.Response.StatusCode));
+                        TrackError(context.Response.StatusCode, context);
                 }
             }
         }
@@ -136,12 +151,7 @@ public class RequestLoggingAndMonitoringMiddleware
             context.Response.StatusCode = StatusCodes.Status500InternalServerError;
             context.Response.ContentType = "application/json; charset=utf-8";
 
-            var errorResponse = new ErrorResponse
-            {
-                Error = ErrorMessage,
-                CorrelationId = correlationId,
-                Timestamp = DateTimeOffset.UtcNow
-            };
+            var errorResponse = ApiErrorResponse.Create(ErrorMessage, "SERVER_ERROR", correlationId);
 
             var json = JsonSerializer.Serialize(errorResponse, JsonOptions);
             await context.Response.WriteAsync(json, context.RequestAborted);
@@ -153,6 +163,20 @@ public class RequestLoggingAndMonitoringMiddleware
                 "Cannot write error response - response has already started (CorrelationId: {CorrelationId})",
                 correlationId);
         }
+    }
+
+    private void TrackError(int statusCode, HttpContext context)
+    {
+        var method = context.Request.Method ?? "UNKNOWN";
+        var path = context.Request.Path.Value ?? "UNKNOWN";
+        var status = statusCode.ToString();
+
+        // Use MetricTags with arrays (safe and explicit)
+        var keys = new[] { "method", "path", "status" };
+        var values = new[] { method, path, status ?? "UNKNOWN" };
+        var tags = new MetricTags(keys, values);
+
+        _metrics.Measure.Counter.Increment(HttpErrors, tags);
     }
 
     private static LogLevel DetermineLogLevel(int statusCode) => statusCode switch
@@ -174,15 +198,6 @@ public class RequestLoggingAndMonitoringMiddleware
             statusCode,
             elapsed.TotalMilliseconds,
             correlationId);
-    }
-    #endregion
-
-    #region Helper Types
-    private record ErrorResponse
-    {
-        public string Error { get; init; } = default!;
-        public string CorrelationId { get; init; } = default!;
-        public DateTimeOffset Timestamp { get; init; }
     }
     #endregion
 }

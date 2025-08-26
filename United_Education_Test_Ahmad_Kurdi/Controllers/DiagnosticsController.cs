@@ -1,52 +1,81 @@
-﻿namespace United_Education_Test_Ahmad_Kurdi.Controllers
+﻿using Microsoft.AspNetCore.Mvc;
+using System.ComponentModel.DataAnnotations;
+using United_Education_Test_Ahmad_Kurdi.DTOs.Response;
+
+namespace United_Education_Test_Ahmad_Kurdi.Controllers
 {
     [ApiController]
-    [Route("[controller]")]
+    [Route("api/[controller]")]
+    [Produces("application/json")]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status500InternalServerError)]
     public class DiagnosticsController : ControllerBase
     {
 
-
         [HttpGet("success")]
-        public async Task<IActionResult> Success()
+        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+        public async Task<ActionResult<ApiResponse<object>>> GetSuccess()
         {
             await Task.CompletedTask; // just an async placeholder
-            return Ok(new { message = "Success" });
+
+            return Ok(ApiResponse<object>.Scucces("Dumy data placeholder"));
         }
 
         [HttpGet("slow")]
-        public async Task<IActionResult> GetSlow()
+        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+        public async Task<ActionResult<ApiResponse<object>>> GetSlow(
+            [FromQuery, Range(100, 10000)] int delayMs = 2000)
         {
-            await Task.Delay(2000); // 2 second delay
-            return Ok(new { message = "Slow response completed" });
+            if (delayMs < 100 || delayMs > 10000)
+            {
+                return BadRequest(ApiErrorResponse.Create(
+                    "Delay must be between 100 and 10000 milliseconds",
+                    "INVALID_DELAY",
+                    GetCorrelationId()));
+            }
+
+            await Task.Delay(delayMs);
+
+            return Ok(ApiResponse<object>.Scucces($"delay = {delayMs}ms"));
         }
 
         [HttpGet("not-found")]
-        public async Task<IActionResult> GetNotFound()
+        [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+        public async Task<ActionResult<ApiErrorResponse>> GetNotFound()
         {
             await Task.CompletedTask;
-            return NotFound(new { error = "Resource not found" });
+
+            return NotFound(ApiErrorResponse.Create(
+                "This is a test not found response",
+                "TEST_NOT_FOUND",
+                GetCorrelationId()));
         }
 
         [HttpGet("bad-request")]
-        public async Task<IActionResult> GetBadRequest()
+        [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+        public async Task<ActionResult<ApiErrorResponse>> GetBadRequest()
         {
             await Task.CompletedTask;
-            return BadRequest(new { error = "Invalid request parameters" });
+
+            return BadRequest(ApiErrorResponse.Create(
+                "This is a test bad request response",
+                "TEST_BAD_REQUEST",
+                GetCorrelationId(),
+                new[] { "Invalid request parameters", "Missing required fields" }));
         }
 
         [HttpGet("server-error")]
-        public async Task<IActionResult> GetServerError()
+        [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult> GetServerError()
         {
             await Task.CompletedTask;
-            throw new InvalidOperationException("This is a test exception");
+
+            throw new InvalidOperationException("This is a test exception for middleware testing");
         }
 
-        [HttpPost("echo")]
-        public async Task<IActionResult> PostEcho([FromBody] object data)
+        private string GetCorrelationId()
         {
-            await Task.CompletedTask;
-            return Ok(new { echo = data });
+            return HttpContext.Items["CorrelationId"]?.ToString() ?? String.Empty;
         }
-
     }
 }
